@@ -9,7 +9,7 @@
 #define SHADER_STR(...) GLSL_VERSION #__VA_ARGS__
 
 const char *vertex_shader = SHADER_STR(
-in vec2 a_Pos;
+layout (location = 0) in vec2 a_Pos;
 
 void main() {
     gl_Position = vec4(a_Pos, 1.0, 1.0);
@@ -22,6 +22,17 @@ void main() {
     fragColor = vec4(1.0, 0.0, 0.0, 1.0);
 }
 );
+const GLfloat vertices[] = {
+    0.5, 0.5,
+    -0.5, 0.5,
+    -0.5, -0.5,
+    0.5, -0.5,
+};
+
+const GLuint indices[] = {
+    0, 1, 2,
+    0, 2, 3,
+};
 
 static int die(const char *msg)
 {
@@ -73,16 +84,18 @@ GLuint link_program(GLuint vertex_shader, GLuint fragment_shader)
 
 GLuint create_vbo()
 {
-    GLfloat vertices[] = {
-        -0.5, 0.5,
-        0.5, 0.5,
-        -0.5, -0.5
-    };
     GLuint vbo_id;
-    glGenBuffers(1, &vbo_id);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo_id);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    glCreateBuffers(1, &vbo_id);
+    glNamedBufferStorage(vbo_id, sizeof(vertices), vertices, 0);
     return vbo_id;
+}
+
+GLuint create_ebo()
+{
+    GLuint ebo_id;
+    glCreateBuffers(1, &ebo_id);
+    glNamedBufferStorage(ebo_id, sizeof(indices), indices, 0);
+    return ebo_id;
 }
 
 int main(void)
@@ -114,22 +127,25 @@ int main(void)
     GLuint program_id = link_program(vShader_id, fShader_id);
 
     GLuint vbo_id = create_vbo();
-    GLuint a_Pos = glGetAttribLocation(program_id, "a_Pos");
+    GLuint ebo_id = create_ebo();
 
     GLuint vao_id;
-    glGenVertexArrays(1, &vao_id);
-    glBindVertexArray(vao_id);
+    glCreateVertexArrays(1, &vao_id);
 
-    glBindBuffer(GL_ARRAY_BUFFER, vbo_id);
-    glVertexAttribPointer(a_Pos, 2, GL_FLOAT, 0, 0, 0);
+    glEnableVertexArrayAttrib(vao_id, 0);
+    glVertexArrayAttribBinding(vao_id, 0, 0);
+    glVertexArrayAttribFormat(vao_id, 0, 2, GL_FLOAT, GL_FALSE, 0);
 
-    glEnableVertexAttribArray(a_Pos);
-    glUseProgram(program_id);
+    glVertexArrayVertexBuffer(vao_id, 0, vbo_id, 0, 2 * sizeof(float));
+    glVertexArrayElementBuffer(vao_id, ebo_id);
 
     while (!glfwWindowShouldClose(window)) {
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+
+        glUseProgram(program_id);
+        glBindVertexArray(vao_id);
+        glDrawElements(GL_TRIANGLES, sizeof(indices)/sizeof(indices[0]), GL_UNSIGNED_INT, 0);
 
         glfwPollEvents();
         glfwSwapBuffers(window);
