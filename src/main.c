@@ -8,32 +8,6 @@
 #define GLSL_VERSION "#version 460 core\n"
 #define SHADER_STR(...) GLSL_VERSION #__VA_ARGS__
 
-const char *vertex_shader = SHADER_STR(
-layout (location = 0) in vec2 a_Pos;
-
-void main() {
-    gl_Position = vec4(a_Pos, 1.0, 1.0);
-}
-);
-
-const char *fragment_shader = SHADER_STR(
-out vec4 fragColor;
-void main() {
-    fragColor = vec4(1.0, 0.0, 0.0, 1.0);
-}
-);
-const GLfloat vertices[] = {
-    0.5, 0.5,
-    -0.5, 0.5,
-    -0.5, -0.5,
-    0.5, -0.5,
-};
-
-const GLuint indices[] = {
-    0, 1, 2,
-    0, 2, 3,
-};
-
 static int die(const char *msg)
 {
     fprintf(stderr, msg);
@@ -82,20 +56,51 @@ GLuint link_program(GLuint vertex_shader, GLuint fragment_shader)
     return program_id;
 }
 
-GLuint create_vbo()
-{
-    GLuint vbo_id;
-    glCreateBuffers(1, &vbo_id);
-    glNamedBufferStorage(vbo_id, sizeof(vertices), vertices, 0);
-    return vbo_id;
-}
 
-GLuint create_ebo()
+/* really slow because of creating buffers on every frame, but works
+ * also leaks buffers
+ */
+static void draw_rect(GLFWwindow *win, int x, int y, int width, int height)
 {
-    GLuint ebo_id;
+    int win_width, win_height;
+    glfwGetWindowSize(win, &win_width, &win_height);
+
+    float left = (2.0 * x) / win_width - 1.0;
+    float right = (2.0 * (x + width)) / win_width - 1.0;
+    float top = 1.0 - (2.0 * y) / win_height;
+    float bottom = 1.0 - (2.0 * (y + height)) / win_height;
+
+    const GLfloat vertices[] = {
+        right, top,
+        left, top,
+        left, bottom,
+        right, bottom,
+    };
+
+    const GLuint indices[] = {
+        0, 1, 2,
+        0, 2, 3,
+    };
+
+    GLuint vbo_id, ebo_id;
+    glCreateBuffers(1, &vbo_id);
     glCreateBuffers(1, &ebo_id);
+
+    glNamedBufferStorage(vbo_id, sizeof(vertices), vertices, 0);
     glNamedBufferStorage(ebo_id, sizeof(indices), indices, 0);
-    return ebo_id;
+
+    GLuint vao_id;
+    glCreateVertexArrays(1, &vao_id);
+
+    glEnableVertexArrayAttrib(vao_id, 0);
+    glVertexArrayAttribBinding(vao_id, 0, 0);
+    glVertexArrayAttribFormat(vao_id, 0, 2, GL_FLOAT, GL_FALSE, 0);
+
+    glVertexArrayVertexBuffer(vao_id, 0, vbo_id, 0, 2 * sizeof(float));
+    glVertexArrayElementBuffer(vao_id, ebo_id);
+
+    glBindVertexArray(vao_id);
+    glDrawElements(GL_TRIANGLES, sizeof(indices)/sizeof(indices[0]), GL_UNSIGNED_INT, 0);
 }
 
 int main(void)
@@ -122,30 +127,31 @@ int main(void)
 
     glfwSwapInterval(1);
 
+    const char *vertex_shader = SHADER_STR(
+    layout (location = 0) in vec2 a_Pos;
+
+    void main() {
+        gl_Position = vec4(a_Pos, 1.0, 1.0);
+    }
+    );
+
+    const char *fragment_shader = SHADER_STR(
+    out vec4 fragColor;
+    void main() {
+        fragColor = vec4(1.0, 0.0, 0.0, 1.0);
+    }
+    );
+
     GLuint vShader_id = compile_shader(vertex_shader, GL_VERTEX_SHADER);
     GLuint fShader_id = compile_shader(fragment_shader, GL_FRAGMENT_SHADER);
     GLuint program_id = link_program(vShader_id, fShader_id);
-
-    GLuint vbo_id = create_vbo();
-    GLuint ebo_id = create_ebo();
-
-    GLuint vao_id;
-    glCreateVertexArrays(1, &vao_id);
-
-    glEnableVertexArrayAttrib(vao_id, 0);
-    glVertexArrayAttribBinding(vao_id, 0, 0);
-    glVertexArrayAttribFormat(vao_id, 0, 2, GL_FLOAT, GL_FALSE, 0);
-
-    glVertexArrayVertexBuffer(vao_id, 0, vbo_id, 0, 2 * sizeof(float));
-    glVertexArrayElementBuffer(vao_id, ebo_id);
-
+    glUseProgram(program_id);
     while (!glfwWindowShouldClose(window)) {
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        glUseProgram(program_id);
-        glBindVertexArray(vao_id);
-        glDrawElements(GL_TRIANGLES, sizeof(indices)/sizeof(indices[0]), GL_UNSIGNED_INT, 0);
+        draw_rect(window, 0, 0, 100, 100);
+        draw_rect(window, 100, 100, 100, 100);
 
         glfwPollEvents();
         glfwSwapBuffers(window);
